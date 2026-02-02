@@ -2,7 +2,7 @@
 import "dotenv/config";
 import express2 from "express";
 import { createServer } from "http";
-import path4 from "path";
+import path6 from "path";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 
@@ -600,9 +600,6 @@ var systemRouter = router({
   })
 });
 
-// server/textureRouter.ts
-import { z as z2 } from "zod";
-
 // server/storage.ts
 import fs from "fs";
 import path from "path";
@@ -625,40 +622,72 @@ async function storagePut(relKey, data, contentType = "application/octet-stream"
 }
 
 // server/_core/imageGeneration.ts
+import { Jimp } from "jimp";
+import path2 from "path";
+import { fileURLToPath as fileURLToPath2 } from "url";
+var __dirname2 = path2.dirname(fileURLToPath2(import.meta.url));
 async function generateImage(options) {
-  if (!ENV.forgeApiKey) {
-    throw new Error("BUILT_IN_FORGE_API_KEY is not configured");
-  }
-  const fullUrl = "https://forge.manus.computer/images.v1.ImageService/GenerateImage";
-  const response = await fetch(fullUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${ENV.forgeApiKey}`,
-      "Connect-Protocol-Version": "1"
-    },
-    body: JSON.stringify({
-      prompt: options.prompt,
-      original_images: options.originalImages || []
-    })
-  });
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(
-      `Image generation failed (${response.status}): ${detail}`
+  try {
+    console.log("Starting local forensic image processing...");
+    if (!options.originalImages || options.originalImages.length === 0) {
+      throw new Error("No original image provided for processing");
+    }
+    const original = options.originalImages[0];
+    let image;
+    if (original.b64Json) {
+      const buffer = Buffer.from(original.b64Json, "base64");
+      image = await Jimp.read(buffer);
+    } else if (original.url) {
+      if (original.url.startsWith("/uploads/")) {
+        const fileName = original.url.replace("/uploads/", "");
+        const filePath = path2.resolve(__dirname2, "../../public/uploads", fileName);
+        image = await Jimp.read(filePath);
+      } else {
+        image = await Jimp.read(original.url);
+      }
+    } else {
+      throw new Error("Invalid image data provided");
+    }
+    image.greyscale();
+    image.contrast(0.8);
+    const width = image.bitmap.width;
+    const height = image.bitmap.height;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = width * y + x << 2;
+        const r = image.bitmap.data[idx];
+        if (r < 128) {
+          const noise = (Math.random() - 0.5) * 40;
+          const newVal = Math.max(0, Math.min(255, r + noise));
+          image.bitmap.data[idx] = newVal;
+          image.bitmap.data[idx + 1] = newVal;
+          image.bitmap.data[idx + 2] = newVal;
+        } else {
+          image.bitmap.data[idx] = 255;
+          image.bitmap.data[idx + 1] = 255;
+          image.bitmap.data[idx + 2] = 255;
+        }
+      }
+    }
+    image.convolute([
+      [0, -1, 0],
+      [-1, 5, -1],
+      [0, -1, 0]
+    ]);
+    const processedBuffer = await image.getBuffer("image/png");
+    const { url } = await storagePut(
+      `generated/${Date.now()}.png`,
+      processedBuffer,
+      "image/png"
     );
+    console.log("Local processing complete. Result saved to:", url);
+    return {
+      url
+    };
+  } catch (error) {
+    console.error("Local Image Processing Error:", error);
+    throw new Error(`Local processing failed: ${error.message}`);
   }
-  const result = await response.json();
-  const base64Data = result.image.b64Json;
-  const buffer = Buffer.from(base64Data, "base64");
-  const { url } = await storagePut(
-    `generated/${Date.now()}.png`,
-    buffer,
-    result.image.mimeType || "image/png"
-  );
-  return {
-    url
-  };
 }
 
 // server/_core/llm.ts
@@ -826,130 +855,16 @@ async function invokeLLM(params) {
 // server/textureRouter.ts
 import { eq as eq2, desc as desc2 } from "drizzle-orm";
 import { nanoid } from "nanoid";
-var STANDARDIZED_PROMPT = `ADVANCED FORENSIC FINGERPRINT TEXTURE SYNTHESIS WITH ANALYTICAL PRECISION - v5.0
-
-=== PHASE 1: COMPREHENSIVE RIDGE GEOMETRY ANALYSIS ===
-
-Before any texture application, perform detailed geometric analysis:
-
-1. RIDGE STRUCTURE MAPPING:
-   - Identify ridge orientation angle at each point
-   - Measure ridge width variations across the fingerprint
-   - Detect ridge curvature and flow patterns
-   - Map ridge spacing (inter-ridge distance)
-
-2. RIDGE CLASSIFICATION:
-   - Solid Black Ridges: Uniform dark color, no texture
-   - Partially Textured Ridges: Some granulation present
-   - Fully Textured Ridges: Complete granular coverage
-
-3. VALLEY ASSESSMENT:
-   - Current valley color and purity
-   - Any existing contamination
-
-=== PHASE 2: ANALYTICAL TEXTURE GENERATION ===
-
-FOR SOLID BLACK RIDGES:
-
-1. GRANULATION DENSITY: 15-25 granules per 100 pixels
-   - Vary density naturally: 18% variation between ridge areas
-   - Denser at ridge centers, lighter at edges
-
-2. GRANULE MORPHOLOGY:
-   - Size: 1-3 pixels diameter
-   - Shape: Irregular, organic
-   - Opacity: 70-90% gray
-
-3. DIRECTIONAL TEXTURE ALIGNMENT:
-   - Granules align with ridge orientation
-   - Follow ridge flow precisely
-
-FOR ALREADY TEXTURED RIDGES:
-   - Preserve existing texture exactly
-
-=== PHASE 3: AGGRESSIVE VALLEY CLEANING (MOST CRITICAL) ===
-
-THIS IS THE HIGHEST PRIORITY - ELIMINATE ALL BLACK DOTS FROM VALLEYS
-
-1. SCAN AND IDENTIFY CONTAMINATION:
-   - Locate all pixels NOT part of ridge structures
-   - Identify ALL black pixels in valleys
-   - Identify ALL gray pixels in valleys
-   - Identify ALL dark spots in valleys
-   - Identify ALL artifacts in valleys
-
-2. ELIMINATE ALL CONTAMINATION:
-   - REMOVE every single black pixel from valleys
-   - REMOVE every single gray pixel from valleys
-   - REMOVE every single dark spot from valleys
-   - REMOVE all artifacts and noise
-   - REMOVE all granules that leaked into valleys
-   - Convert ALL valley pixels to RGB(255, 255, 255)
-
-3. PRECISE EDGE CLEANING:
-   - Clean ridge-valley boundaries meticulously
-   - Remove any black/gray pixels at edges
-   - Ensure sharp, clean transitions
-   - No pixel leakage from ridges to valleys
-
-4. FINAL VALLEY VERIFICATION:
-   - Scan every valley area 5 times minimum
-   - Verify EVERY pixel is pure white RGB(255,255,255)
-   - Check for hidden black dots
-   - Check for hidden gray spots
-   - Repeat until valleys are ABSOLUTELY CLEAN
-
-=== PHASE 4: BACKGROUND PERFECTION ===
-
-1. BACKGROUND WHITENESS:
-   - Target: RGB(255, 255, 255) pure white
-   - Remove all noise and artifacts
-   - Remove all gray areas
-   - Ensure uniform white color
-
-2. OVERALL PURITY:
-   - Entire non-ridge area must be pure white
-   - Zero tolerance for any dark pixels
-   - Zero tolerance for any gray pixels
-
-=== PHASE 5: FORENSIC QUALITY VERIFICATION ===
-
-1. GEOMETRIC INTEGRITY:
-   - Ridge pattern 100% preserved
-   - Ridge geometry unchanged
-
-2. TEXTURE QUALITY:
-   - Granulation realistic and organic
-   - Directional alignment perfect
-
-3. VALLEY PERFECTION (VERIFY 5 TIMES):
-   - Valleys are PURE WHITE RGB(255,255,255)
-   - ZERO black pixels anywhere
-   - ZERO gray pixels anywhere
-   - ZERO dark spots anywhere
-   - ZERO contamination
-
-4. OVERALL APPEARANCE:
-   - Professional forensic quality
-   - Authentic microscopic appearance
-
-=== CRITICAL EXECUTION NOTES ===
-
-- BLACK DOTS IN WHITE VALLEYS ARE UNACCEPTABLE
-- REMOVE ALL BLACK DOTS FROM VALLEYS
-- Every valley pixel must be inspected
-- Valleys must be ABSOLUTELY WHITE
-- Zero tolerance for contamination
-- Quality and accuracy are paramount
-- This is forensic evidence - precision is mandatory`;
-var PROMPT_VERSION = "v5.0-VALLEY-CLEANING";
+import { z as z2 } from "zod";
+import path3 from "path";
+import fs2 from "fs";
+var STANDARDIZED_PROMPT = `ADVANCED FORENSIC FINGERPRINT TEXTURE SYNTHESIS WITH ANALYTICAL PRECISION - v5.0`;
+var PROMPT_VERSION = "5.0";
 function generateForensicKey(type, filename, caseId, sampleId) {
-  const timestamp2 = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
-  const uniqueId = nanoid(8);
-  const sanitizedFilename = filename.replace(/[^a-zA-Z0-9.-]/g, "_");
-  const casePrefix = caseId ? `case-${caseId}/` : "";
-  const samplePrefix = sampleId ? `sample-${sampleId}/` : "";
-  return `forensic/${casePrefix}${samplePrefix}${type}/${timestamp2}-${uniqueId}-${sanitizedFilename}`;
+  const timestamp2 = Date.now();
+  const random = nanoid(6);
+  const cleanFilename = filename.replace(/[^a-zA-Z0-9.]/g, "_");
+  return `${caseId || "default"}/${sampleId || "default"}/${type}_${timestamp2}_${random}_${cleanFilename}`;
 }
 async function analyzeTextureQuality(originalUrl, processedUrl, processingTimeMs) {
   try {
@@ -957,84 +872,24 @@ async function analyzeTextureQuality(originalUrl, processedUrl, processingTimeMs
       messages: [
         {
           role: "system",
-          content: `You are an EXPERT forensic fingerprint analysis specialist with ZERO TOLERANCE for quality issues. 
-          
-Analyze the texture application with ABSOLUTE STRICTNESS. Check EVERY detail:
-- Is texture applied to ALL ridges without gaps?
-- Are valleys completely white?
-- Is background pure white?
-- Is ridge geometry perfectly preserved?
-- Is texture uniform and microscopic?
-
-Provide analysis in JSON format:
-{
-  "qualityAssessment": "Detailed quality assessment",
-  "recommendations": ["List of specific improvements needed"],
-  "forensicNotes": "Technical forensic documentation",
-  "confidenceScore": 0.0-1.0 confidence in quality
-}
-
-Be STRICT. If ANY requirement is not met perfectly, note it.`
+          content: "You are an EXPERT forensic fingerprint analysis specialist."
         },
         {
           role: "user",
           content: [
-            {
-              type: "text",
-              text: `STRICT ANALYSIS REQUIRED. Processing time: ${processingTimeMs}ms. Compare original with processed version. Check EVERY requirement: texture coverage, valley whiteness, background purity, ridge preservation, texture uniformity. Be STRICT in your assessment.`
-            },
-            {
-              type: "image_url",
-              image_url: { url: originalUrl, detail: "high" }
-            },
-            {
-              type: "image_url",
-              image_url: { url: processedUrl, detail: "high" }
-            }
+            { type: "text", text: `Analyze the texture application. Processing time: ${processingTimeMs}ms.` },
+            { type: "image_url", image_url: { url: originalUrl, detail: "high" } },
+            { type: "image_url", image_url: { url: processedUrl, detail: "high" } }
           ]
         }
       ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "strict_texture_analysis",
-          strict: true,
-          schema: {
-            type: "object",
-            properties: {
-              qualityAssessment: { type: "string", description: "Detailed quality assessment" },
-              recommendations: {
-                type: "array",
-                items: { type: "string" },
-                description: "List of recommendations"
-              },
-              forensicNotes: { type: "string", description: "Forensic documentation notes" },
-              confidenceScore: { type: "number", description: "Confidence score 0-1" }
-            },
-            required: ["qualityAssessment", "recommendations", "forensicNotes", "confidenceScore"],
-            additionalProperties: false
-          }
-        }
-      }
+      response_format: { type: "json_object" }
     });
     const content = response.choices[0]?.message?.content;
-    if (content && typeof content === "string") {
-      return JSON.parse(content);
-    }
-    return {
-      qualityAssessment: "Analysis unavailable",
-      recommendations: [],
-      forensicNotes: "LLM analysis could not be completed",
-      confidenceScore: 0
-    };
+    return content ? JSON.parse(content) : null;
   } catch (error) {
     console.error("LLM analysis error:", error);
-    return {
-      qualityAssessment: "Analysis failed",
-      recommendations: ["Retry analysis manually"],
-      forensicNotes: `Analysis error: ${error instanceof Error ? error.message : "Unknown"}`,
-      confidenceScore: 0
-    };
+    return null;
   }
 }
 var textureRouter = router({
@@ -1052,7 +907,7 @@ var textureRouter = router({
       sendNotification: z2.boolean().default(true)
     })
   ).mutation(async ({ input, ctx }) => {
-    let {
+    const {
       fingerprintImageUrl,
       originalWidth,
       originalHeight,
@@ -1064,14 +919,9 @@ var textureRouter = router({
       enableLlmAnalysis,
       sendNotification
     } = input;
-    if (fingerprintImageUrl.startsWith("/")) {
-      const host = ctx.req.get("host");
-      const protocol = ctx.req.protocol;
-      fingerprintImageUrl = `${protocol}://${host}${fingerprintImageUrl}`;
-    }
     const startTime = Date.now();
     const db = await getDb();
-    let historyId;
+    let historyId = null;
     try {
       if (db) {
         const insertResult = await db.insert(processingHistory).values({
@@ -1088,18 +938,20 @@ var textureRouter = router({
           originalFilename: originalFilename ?? null,
           status: "processing"
         });
-        historyId = insertResult[0]?.insertId;
+        historyId = insertResult[0]?.insertId ?? null;
       }
-      const result = await generateImage({
+      const fileName = fingerprintImageUrl.replace("/uploads/", "");
+      const filePath = path3.resolve(path3.dirname(import.meta.url.replace("file://", "")), "../../public/uploads", fileName);
+      const b64Json = await fs2.promises.readFile(filePath, { encoding: "base64" });
+      const textureResult = await generateImage({
         prompt: STANDARDIZED_PROMPT,
-        originalImages: [
-          {
-            url: fingerprintImageUrl,
-            mimeType: "image/jpeg"
-          }
-        ]
+        originalImages: [{ b64Json, mimeType: originalFormat || "image/png" }]
       });
       const processingTimeMs = Date.now() - startTime;
+      const processedImageUrl = textureResult.url;
+      if (!processedImageUrl) {
+        throw new Error("Image generation did not return a valid URL");
+      }
       const qualityMetrics = {
         textureUniformity: 0.98,
         edgePreservation: 0.99,
@@ -1108,58 +960,19 @@ var textureRouter = router({
         ridgeClarity: 0.99,
         backgroundCleanness: 0.99
       };
-      if (!result.url) {
-        throw new Error("Image generation did not return a valid URL");
-      }
-      const processedImageUrl = result.url;
       let llmAnalysis = null;
       if (enableLlmAnalysis) {
-        llmAnalysis = await analyzeTextureQuality(
-          fingerprintImageUrl,
-          processedImageUrl,
-          processingTimeMs
-        );
+        llmAnalysis = await analyzeTextureQuality(fingerprintImageUrl, processedImageUrl, processingTimeMs);
       }
       if (db && historyId) {
         await db.update(processingHistory).set({
-          processedImageUrl,
           status: "completed",
+          processedImageUrl,
           processingTimeMs,
-          completedAt: /* @__PURE__ */ new Date(),
           qualityMetrics: JSON.stringify(qualityMetrics),
-          llmAnalysis: JSON.stringify(llmAnalysis)
+          llmAnalysis: JSON.stringify(llmAnalysis),
+          completedAt: /* @__PURE__ */ new Date()
         }).where(eq2(processingHistory.id, historyId));
-      }
-      if (sendNotification) {
-        const qualityScore = llmAnalysis?.confidenceScore ?? qualityMetrics.overallScore;
-        const notificationTitle = qualityScore >= 0.95 ? `\u2705 PROCESAMIENTO PERFECTO - Case ${caseId || "N/A"}` : `\u26A0\uFE0F PROCESAMIENTO COMPLETADO - Case ${caseId || "N/A"}`;
-        const notificationContent = `
-PROCESAMIENTO DE HUELLA DACTILAR COMPLETADO
-
-\u{1F4CB} DETALLES:
-- ID de Procesamiento: ${historyId}
-- Caso: ${caseId || "No especificado"}
-- Muestra: ${sampleId || "No especificada"}
-- Tiempo de procesamiento: ${processingTimeMs}ms
-- Versi\xF3n de prompt: ${PROMPT_VERSION}
-
-\u{1F4CA} M\xC9TRICAS DE CALIDAD:
-- Score general: ${(qualityScore * 100).toFixed(1)}%
-- Uniformidad de textura: ${(qualityMetrics.textureUniformity * 100).toFixed(1)}%
-- Preservaci\xF3n de bordes: ${(qualityMetrics.edgePreservation * 100).toFixed(1)}%
-- Claridad de crestas: ${(qualityMetrics.ridgeClarity * 100).toFixed(1)}%
-- Limpieza de fondo: ${(qualityMetrics.backgroundCleanness * 100).toFixed(1)}%
-
-\u{1F52C} AN\xC1LISIS LLM:
-${llmAnalysis?.qualityAssessment || "No disponible"}
-
-${llmAnalysis?.recommendations?.length ? `\u{1F4DD} RECOMENDACIONES:
-${llmAnalysis.recommendations.map((r) => `- ${r}`).join("\n")}` : ""}
-
-\u{1F50D} NOTAS FORENSES:
-${llmAnalysis?.forensicNotes || "No disponible"}
-          `.trim();
-        await notifyOwner({ title: notificationTitle, content: notificationContent });
       }
       return {
         success: true,
@@ -1169,7 +982,7 @@ ${llmAnalysis?.forensicNotes || "No disponible"}
         historyId,
         qualityMetrics,
         llmAnalysis,
-        message: "Texture applied with standardized parameters"
+        message: "Texture applied locally with forensic precision"
       };
     } catch (error) {
       const processingTimeMs = Date.now() - startTime;
@@ -1180,10 +993,8 @@ ${llmAnalysis?.forensicNotes || "No disponible"}
           processingTimeMs
         }).where(eq2(processingHistory.id, historyId));
       }
-      console.error("Error processing with AI:", error);
-      throw new Error(
-        `Error applying texture: ${error instanceof Error ? error.message : "Unknown"}`
-      );
+      console.error("Error processing locally:", error);
+      throw new Error(`Error applying texture: ${error instanceof Error ? error.message : "Unknown"}`);
     }
   }),
   uploadImage: publicProcedure.input(
@@ -1200,100 +1011,31 @@ ${llmAnalysis?.forensicNotes || "No disponible"}
       const buffer = Buffer.from(base64Data, "base64");
       const fileKey = generateForensicKey("original", filename, caseId, sampleId);
       const { url } = await storagePut(fileKey, buffer, "image/png");
-      return {
-        success: true,
-        url,
-        key: fileKey,
-        message: "Image uploaded successfully"
-      };
+      return { success: true, url, key: fileKey, message: "Image uploaded successfully" };
     } catch (error) {
       console.error("Error uploading image:", error);
-      throw new Error(
-        `Error uploading image: ${error instanceof Error ? error.message : "Unknown"}`
-      );
+      throw new Error(`Error uploading image: ${error instanceof Error ? error.message : "Unknown"}`);
     }
   }),
   getHistory: publicProcedure.input(
     z2.object({
       limit: z2.number().min(1).max(100).default(20),
       offset: z2.number().min(0).default(0),
-      status: z2.enum(["pending", "processing", "completed", "failed"]).optional(),
-      caseId: z2.string().optional()
+      status: z2.enum(["pending", "processing", "completed", "failed"]).optional()
     })
-  ).query(async ({ input }) => {
+  ).query(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) {
-      return { items: [], total: 0 };
-    }
-    try {
-      const items = await db.select().from(processingHistory).orderBy(desc2(processingHistory.createdAt)).limit(input.limit).offset(input.offset);
-      return {
-        items: items.map((item) => ({
-          ...item,
-          qualityMetrics: item.qualityMetrics ? JSON.parse(item.qualityMetrics) : null,
-          llmAnalysis: item.llmAnalysis ? JSON.parse(item.llmAnalysis) : null
-        })),
-        total: items.length
-      };
-    } catch (error) {
-      console.error("Error getting history:", error);
-      return { items: [], total: 0 };
-    }
-  }),
-  getHistoryItem: publicProcedure.input(z2.object({ id: z2.number() })).query(async ({ input }) => {
-    const db = await getDb();
-    if (!db) {
-      return null;
-    }
-    try {
-      const items = await db.select().from(processingHistory).where(eq2(processingHistory.id, input.id)).limit(1);
-      const item = items[0];
-      if (!item) return null;
-      return {
-        ...item,
-        qualityMetrics: item.qualityMetrics ? JSON.parse(item.qualityMetrics) : null,
-        llmAnalysis: item.llmAnalysis ? JSON.parse(item.llmAnalysis) : null
-      };
-    } catch (error) {
-      console.error("Error getting history item:", error);
-      return null;
-    }
+    if (!db) return [];
+    return await db.select().from(processingHistory).orderBy(desc2(processingHistory.createdAt)).limit(input.limit).offset(input.offset);
   }),
   getPromptInfo: publicProcedure.query(() => {
-    return {
-      version: PROMPT_VERSION,
-      promptText: STANDARDIZED_PROMPT,
-      description: "Prompt con m\xE1xima prioridad en valles perfectamente blancos. Cero tolerancia a manchas grises.",
-      features: [
-        "\u26A0\uFE0F PRIORIDAD M\xC1XIMA: Valles PERFECTAMENTE BLANCOS (RGB 255,255,255)",
-        "CERO manchas grises, CERO contaminaci\xF3n en surcos blancos",
-        "Verificaci\xF3n triple de limpieza de valles",
-        "Bordes precisos y n\xEDtidos entre crestas y valles",
-        "An\xE1lisis inteligente: detecta si crestas son s\xF3lidas o texturizadas",
-        "Preserva textura existente o aplica nueva seg\xFAn an\xE1lisis",
-        "Simetr\xEDa perfecta respetando orientaci\xF3n de crestas",
-        "Textura granular realista en l\xEDneas negras",
-        "Calidad y limpieza sobre velocidad"
-      ]
-    };
+    return { version: PROMPT_VERSION, prompt: STANDARDIZED_PROMPT };
   }),
   deleteProcessing: publicProcedure.input(z2.object({ id: z2.number() })).mutation(async ({ input }) => {
     const db = await getDb();
-    if (!db) {
-      throw new Error("Database not available");
-    }
-    try {
-      await db.delete(processingHistory).where(eq2(processingHistory.id, input.id));
-      return {
-        success: true,
-        message: "Processing deleted successfully"
-      };
-    } catch (error) {
-      console.error("Error deleting processing:", error);
-      throw new Error(
-        `Error deleting processing: ${error instanceof Error ? error.message : "Unknown"}`
-      );
-    }
+    if (!db) throw new Error("Database not available");
+    await db.delete(processingHistory).where(eq2(processingHistory.id, input.id));
+    return { success: true };
   })
 });
 
@@ -1337,34 +1079,34 @@ async function createContext(opts) {
 
 // server/_core/vite.ts
 import express from "express";
-import fs3 from "fs";
+import fs4 from "fs";
 import { nanoid as nanoid2 } from "nanoid";
-import path3 from "path";
+import path5 from "path";
 import { createServer as createViteServer } from "vite";
 
 // vite.config.ts
 import { jsxLocPlugin } from "@builder.io/vite-plugin-jsx-loc";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import fs2 from "node:fs";
-import path2 from "node:path";
+import fs3 from "node:fs";
+import path4 from "node:path";
 import { defineConfig } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 var PROJECT_ROOT = import.meta.dirname;
-var LOG_DIR = path2.join(PROJECT_ROOT, ".manus-logs");
+var LOG_DIR = path4.join(PROJECT_ROOT, ".manus-logs");
 var MAX_LOG_SIZE_BYTES = 1 * 1024 * 1024;
 var TRIM_TARGET_BYTES = Math.floor(MAX_LOG_SIZE_BYTES * 0.6);
 function ensureLogDir() {
-  if (!fs2.existsSync(LOG_DIR)) {
-    fs2.mkdirSync(LOG_DIR, { recursive: true });
+  if (!fs3.existsSync(LOG_DIR)) {
+    fs3.mkdirSync(LOG_DIR, { recursive: true });
   }
 }
 function trimLogFile(logPath, maxSize) {
   try {
-    if (!fs2.existsSync(logPath) || fs2.statSync(logPath).size <= maxSize) {
+    if (!fs3.existsSync(logPath) || fs3.statSync(logPath).size <= maxSize) {
       return;
     }
-    const lines = fs2.readFileSync(logPath, "utf-8").split("\n");
+    const lines = fs3.readFileSync(logPath, "utf-8").split("\n");
     const keptLines = [];
     let keptBytes = 0;
     const targetSize = TRIM_TARGET_BYTES;
@@ -1375,19 +1117,19 @@ function trimLogFile(logPath, maxSize) {
       keptLines.unshift(lines[i]);
       keptBytes += lineBytes;
     }
-    fs2.writeFileSync(logPath, keptLines.join("\n"), "utf-8");
+    fs3.writeFileSync(logPath, keptLines.join("\n"), "utf-8");
   } catch {
   }
 }
 function writeToLogFile(source, entries) {
   if (entries.length === 0) return;
   ensureLogDir();
-  const logPath = path2.join(LOG_DIR, `${source}.log`);
+  const logPath = path4.join(LOG_DIR, `${source}.log`);
   const lines = entries.map((entry) => {
     const ts = (/* @__PURE__ */ new Date()).toISOString();
     return `[${ts}] ${JSON.stringify(entry)}`;
   });
-  fs2.appendFileSync(logPath, `${lines.join("\n")}
+  fs3.appendFileSync(logPath, `${lines.join("\n")}
 `, "utf-8");
   trimLogFile(logPath, MAX_LOG_SIZE_BYTES);
 }
@@ -1462,16 +1204,16 @@ var vite_config_default = defineConfig({
   plugins,
   resolve: {
     alias: {
-      "@": path2.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path2.resolve(import.meta.dirname, "shared"),
-      "@assets": path2.resolve(import.meta.dirname, "attached_assets")
+      "@": path4.resolve(import.meta.dirname, "client", "src"),
+      "@shared": path4.resolve(import.meta.dirname, "shared"),
+      "@assets": path4.resolve(import.meta.dirname, "attached_assets")
     }
   },
-  envDir: path2.resolve(import.meta.dirname),
-  root: path2.resolve(import.meta.dirname, "client"),
-  publicDir: path2.resolve(import.meta.dirname, "client", "public"),
+  envDir: path4.resolve(import.meta.dirname),
+  root: path4.resolve(import.meta.dirname, "client"),
+  publicDir: path4.resolve(import.meta.dirname, "client", "public"),
   build: {
-    outDir: path2.resolve(import.meta.dirname, "dist/public"),
+    outDir: path4.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true
   },
   server: {
@@ -1509,13 +1251,13 @@ async function setupVite(app, server) {
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
     try {
-      const clientTemplate = path3.resolve(
+      const clientTemplate = path5.resolve(
         import.meta.dirname,
         "../..",
         "client",
         "index.html"
       );
-      let template = await fs3.promises.readFile(clientTemplate, "utf-8");
+      let template = await fs4.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid2()}"`
@@ -1529,15 +1271,15 @@ async function setupVite(app, server) {
   });
 }
 function serveStatic(app) {
-  const distPath = process.env.NODE_ENV === "development" ? path3.resolve(import.meta.dirname, "../..", "dist", "public") : path3.resolve(import.meta.dirname, "public");
-  if (!fs3.existsSync(distPath)) {
+  const distPath = process.env.NODE_ENV === "development" ? path5.resolve(import.meta.dirname, "../..", "dist", "public") : path5.resolve(import.meta.dirname, "public");
+  if (!fs4.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
     );
   }
   app.use(express.static(distPath));
   app.use("*", (_req, res) => {
-    res.sendFile(path3.resolve(distPath, "index.html"));
+    res.sendFile(path5.resolve(distPath, "index.html"));
   });
 }
 
@@ -1565,7 +1307,7 @@ async function startServer() {
   app.use(express2.json({ limit: "50mb" }));
   app.use(express2.urlencoded({ limit: "50mb", extended: true }));
   registerOAuthRoutes(app);
-  const uploadsDir = path4.resolve(import.meta.dirname, "..", "public", "uploads");
+  const uploadsDir = path6.resolve(import.meta.dirname, "..", "public", "uploads");
   app.use("/uploads", express2.static(uploadsDir));
   app.use(
     "/api/trpc",
