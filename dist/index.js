@@ -625,41 +625,40 @@ async function storagePut(relKey, data, contentType = "application/octet-stream"
 }
 
 // server/_core/imageGeneration.ts
-import OpenAI from "openai";
-var openai = new OpenAI({
-  apiKey: ENV.forgeApiKey,
-  baseURL: "https://forge.manus.computer/v1"
-});
 async function generateImage(options) {
   if (!ENV.forgeApiKey) {
     throw new Error("BUILT_IN_FORGE_API_KEY is not configured");
   }
-  try {
-    const response = await openai.images.generate({
-      model: "gpt-4.1-nano",
-      // Use the appropriate model for image generation in Forge
+  const fullUrl = "https://forge.manus.computer/images.v1.ImageService/GenerateImage";
+  const response = await fetch(fullUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${ENV.forgeApiKey}`,
+      "Connect-Protocol-Version": "1"
+    },
+    body: JSON.stringify({
       prompt: options.prompt,
-      n: 1,
-      size: "1024x1024",
-      response_format: "b64_json"
-    });
-    const base64Data = response.data[0].b64_json;
-    if (!base64Data) {
-      throw new Error("No image data received from Forge API");
-    }
-    const buffer = Buffer.from(base64Data, "base64");
-    const { url } = await storagePut(
-      `generated/${Date.now()}.png`,
-      buffer,
-      "image/png"
+      original_images: options.originalImages || []
+    })
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(
+      `Image generation failed (${response.status}): ${detail}`
     );
-    return {
-      url
-    };
-  } catch (error) {
-    console.error("Forge Image Generation Error:", error);
-    throw new Error(`Image generation failed: ${error.message}`);
   }
+  const result = await response.json();
+  const base64Data = result.image.b64Json;
+  const buffer = Buffer.from(base64Data, "base64");
+  const { url } = await storagePut(
+    `generated/${Date.now()}.png`,
+    buffer,
+    result.image.mimeType || "image/png"
+  );
+  return {
+    url
+  };
 }
 
 // server/_core/llm.ts
