@@ -627,15 +627,17 @@ async function storagePut(relKey, data, contentType = "application/octet-stream"
 // server/_core/imageGeneration.ts
 import OpenAI from "openai";
 var openai = new OpenAI({
-  apiKey: ENV.forgeApiKey
+  apiKey: ENV.forgeApiKey,
+  baseURL: "https://forge.manus.computer/v1"
 });
 async function generateImage(options) {
   if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+    throw new Error("BUILT_IN_FORGE_API_KEY is not configured");
   }
   try {
     const response = await openai.images.generate({
-      model: "dall-e-3",
+      model: "gpt-4.1-nano",
+      // Use the appropriate model for image generation in Forge
       prompt: options.prompt,
       n: 1,
       size: "1024x1024",
@@ -643,7 +645,7 @@ async function generateImage(options) {
     });
     const base64Data = response.data[0].b64_json;
     if (!base64Data) {
-      throw new Error("No image data received from OpenAI");
+      throw new Error("No image data received from Forge API");
     }
     const buffer = Buffer.from(base64Data, "base64");
     const { url } = await storagePut(
@@ -655,7 +657,7 @@ async function generateImage(options) {
       url
     };
   } catch (error) {
-    console.error("OpenAI Image Generation Error:", error);
+    console.error("Forge Image Generation Error:", error);
     throw new Error(`Image generation failed: ${error.message}`);
   }
 }
