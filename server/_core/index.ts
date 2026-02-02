@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
+import path from "path";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
@@ -35,6 +36,11 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+
+  // Serve uploads directory
+  const uploadsDir = path.resolve(import.meta.dirname, "..", "public", "uploads");
+  app.use("/uploads", express.static(uploadsDir));
+
   // tRPC API
   app.use(
     "/api/trpc",

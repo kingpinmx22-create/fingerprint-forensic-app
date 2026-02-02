@@ -253,7 +253,7 @@ export const textureRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const { 
+      let { 
         fingerprintImageUrl, 
         originalWidth, 
         originalHeight, 
@@ -265,6 +265,13 @@ export const textureRouter = router({
         enableLlmAnalysis,
         sendNotification
       } = input;
+
+      // Ensure absolute URL for IA processing
+      if (fingerprintImageUrl.startsWith("/")) {
+        const host = ctx.req.get("host");
+        const protocol = ctx.req.protocol;
+        fingerprintImageUrl = `${protocol}://${host}${fingerprintImageUrl}`;
+      }
       
       const startTime = Date.now();
       const db = await getDb();
