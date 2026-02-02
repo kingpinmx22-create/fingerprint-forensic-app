@@ -1,22 +1,6 @@
-/**
- * Image generation helper using internal ImageService
- *
- * Example usage:
- *   const { url: imageUrl } = await generateImage({
- *     prompt: "A serene landscape with mountains"
- *   });
- *
- * For editing:
- *   const { url: imageUrl } = await generateImage({
- *     prompt: "Add a rainbow to this landscape",
- *     originalImages: [{
- *       url: "https://example.com/original.jpg",
- *       mimeType: "image/jpeg"
- *     }]
- *   });
- */
 import { storagePut } from "server/storage";
 import { ENV } from "./env";
+import OpenAI from "openai";
 
 export type GenerateImageOptions = {
   prompt: string;
@@ -31,60 +15,48 @@ export type GenerateImageResponse = {
   url?: string;
 };
 
+const openai = new OpenAI({
+  apiKey: ENV.forgeApiKey,
+});
+
 export async function generateImage(
   options: GenerateImageOptions
 ): Promise<GenerateImageResponse> {
-  if (!ENV.forgeApiUrl) {
-    throw new Error("BUILT_IN_FORGE_API_URL is not configured");
-  }
   if (!ENV.forgeApiKey) {
-    throw new Error("BUILT_IN_FORGE_API_KEY is not configured");
+    throw new Error("OPENAI_API_KEY is not configured");
   }
 
-  // Build the full URL by appending the service path to the base URL
-  const baseUrl = "https://forge.manus.computer/";
-  const fullUrl = new URL(
-    "images.v1.ImageService/GenerateImage",
-    baseUrl
-  ).toString();
-
-  const response = await fetch(fullUrl, {
-    method: "POST",
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-      "connect-protocol-version": "1",
-      authorization: `Bearer ${ENV.forgeApiKey}`,
-    },
-    body: JSON.stringify({
+  try {
+    // Using DALL-E 3 for high quality forensic texture generation
+    // Note: DALL-E 3 doesn't support image-to-image in the same way as Forge,
+    // so we use the prompt to describe the transformation.
+    const response = await openai.images.generate({
+      model: "dall-e-3",
       prompt: options.prompt,
-      original_images: options.originalImages || [],
-    }),
-  });
+      n: 1,
+      size: "1024x1024",
+      response_format: "b64_json",
+    });
 
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(
-      `Image generation request failed (${response.status} ${response.statusText})${detail ? `: ${detail}` : ""}`
+    const base64Data = response.data[0].b64_json;
+    if (!base64Data) {
+      throw new Error("No image data received from OpenAI");
+    }
+    
+    const buffer = Buffer.from(base64Data, "base64");
+
+    // Save to local storage
+    const { url } = await storagePut(
+      `generated/${Date.now()}.png`,
+      buffer,
+      "image/png"
     );
-  }
-
-  const result = (await response.json()) as {
-    image: {
-      b64Json: string;
-      mimeType: string;
+    
+    return {
+      url,
     };
-  };
-  const base64Data = result.image.b64Json;
-  const buffer = Buffer.from(base64Data, "base64");
-
-  // Save to S3
-  const { url } = await storagePut(
-    `generated/${Date.now()}.png`,
-    buffer,
-    result.image.mimeType
-  );
-  return {
-    url,
-  };
+  } catch (error: any) {
+    console.error("OpenAI Image Generation Error:", error);
+    throw new Error(`Image generation failed: ${error.message}`);
+  }
 }
