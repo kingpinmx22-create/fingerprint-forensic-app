@@ -240,7 +240,7 @@ export const textureRouter = router({
   applyTexture: publicProcedure
     .input(
       z.object({
-        fingerprintImageUrl: z.string().url(),
+        fingerprintImageUrl: z.string(),
         originalWidth: z.number().optional(),
         originalHeight: z.number().optional(),
         originalSizeBytes: z.number().optional(),
