@@ -3,7 +3,7 @@ region: fra
 services:
 - name: fingerprint-app
   instance_count: 1
-  instance_size_slug: basic-xxs
+  instance_size_slug: basic-xs
   dockerfile_path: Dockerfile
   github:
     repo: kingpinmx22-create/fingerprint-forensic-app
@@ -15,7 +15,7 @@ services:
     value: production
   - key: PORT
     scope: RUN_TIME
-    value: "8080"
+    value: "3000"
   - key: DATABASE_URL
     scope: RUN_TIME
     type: SECRET
@@ -35,11 +35,11 @@ services:
     scope: RUN_TIME
     type: SECRET
     value: replace_with_your_open_id
-  http_port: 8080
+  http_port: 3000
   routes:
   - path: /
 databases:
 - name: fingerprint-db
   engine: MYSQL
   version: "8"
-  production: false
+  production: true
