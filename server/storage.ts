@@ -72,13 +72,17 @@ export async function storagePut(
   data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream"
 ): Promise<{ key: string; url: string }> {
-  const { baseUrl, apiKey } = getStorageConfig();
+  const { apiKey } = getStorageConfig();
+  const baseUrl = "https://forge.manus.computer";
   const key = normalizeKey(relKey);
   const uploadUrl = buildUploadUrl(baseUrl, key);
   const formData = toFormData(data, contentType, key.split("/").pop() ?? key);
   const response = await fetch(uploadUrl, {
     method: "POST",
-    headers: buildAuthHeaders(apiKey),
+    headers: {
+      ...buildAuthHeaders(apiKey),
+      "Host": "forge.manus.computer"
+    },
     body: formData,
   });
 

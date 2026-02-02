@@ -42,9 +42,7 @@ export async function generateImage(
   }
 
   // Build the full URL by appending the service path to the base URL
-  const baseUrl = ENV.forgeApiUrl.endsWith("/")
-    ? ENV.forgeApiUrl
-    : `${ENV.forgeApiUrl}/`;
+  const baseUrl = "https://forge.manus.computer/";
   const fullUrl = new URL(
     "images.v1.ImageService/GenerateImage",
     baseUrl
