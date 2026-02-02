@@ -2,6 +2,7 @@
 // Uses the Biz-provided storage proxy (Authorization: Bearer <token>)
 
 import { ENV } from './_core/env';
+import axios from 'axios';
 
 type StorageConfig = { baseUrl: string; apiKey: string };
 
@@ -75,25 +76,28 @@ export async function storagePut(
   const { apiKey } = getStorageConfig();
   const baseUrl = "https://forge.manus.computer";
   const key = normalizeKey(relKey);
-  const uploadUrl = buildUploadUrl(baseUrl, key);
-  const formData = toFormData(data, contentType, key.split("/").pop() ?? key);
-  const response = await fetch(uploadUrl, {
-    method: "POST",
-    headers: {
-      ...buildAuthHeaders(apiKey),
-      "Host": "forge.manus.computer"
-    },
-    body: formData,
-  });
+  const uploadUrl = buildUploadUrl(baseUrl, key).toString();
+  
+  const formData = new FormData();
+  const blob = typeof data === "string" 
+    ? new Blob([data], { type: contentType }) 
+    : new Blob([data as any], { type: contentType });
+  formData.append("file", blob, key.split("/").pop() ?? "file");
 
-  if (!response.ok) {
-    const message = await response.text().catch(() => response.statusText);
-    throw new Error(
-      `Storage upload failed (${response.status} ${response.statusText}): ${message}`
-    );
+  try {
+    const response = await axios.post(uploadUrl, formData, {
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Host": "forge.manus.computer",
+        "Origin": "https://forge.manus.computer",
+        "Referer": "https://forge.manus.computer/"
+      }
+    });
+    return { key, url: response.data.url };
+  } catch (error: any) {
+    const message = error.response?.data || error.message;
+    throw new Error(`Storage upload failed: ${message}`);
   }
-  const url = (await response.json()).url;
-  return { key, url };
 }
 
 export async function storageGet(relKey: string): Promise<{ key: string; url: string; }> {
