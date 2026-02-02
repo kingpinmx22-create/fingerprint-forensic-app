@@ -1,0 +1,45 @@
+name: fingerprint-forensic-app
+region: fra
+services:
+- name: fingerprint-app
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  dockerfile_path: Dockerfile
+  github:
+    repo: kingpinmx22-create/fingerprint-forensic-app
+    branch: main
+    deploy_on_push: true
+  envs:
+  - key: NODE_ENV
+    scope: RUN_AND_BUILD_TIME
+    value: production
+  - key: PORT
+    scope: RUN_TIME
+    value: "8080"
+  - key: DATABASE_URL
+    scope: RUN_TIME
+    type: SECRET
+    value: mysql://user:pass@host:3306/db
+  - key: JWT_SECRET
+    scope: RUN_TIME
+    type: SECRET
+    value: replace_with_random_secret
+  - key: BUILT_IN_FORGE_API_URL
+    scope: RUN_TIME
+    value: https://forge.manus.im
+  - key: BUILT_IN_FORGE_API_KEY
+    scope: RUN_TIME
+    type: SECRET
+    value: replace_with_your_forge_api_key
+  - key: OWNER_OPEN_ID
+    scope: RUN_TIME
+    type: SECRET
+    value: replace_with_your_open_id
+  http_port: 8080
+  routes:
+  - path: /
+databases:
+- name: fingerprint-db
+  engine: MYSQL
+  version: "8"
+  production: false
