@@ -1,0 +1,29 @@
+name: fingerprint-forensic-app
+services:
+  - name: app
+    type: web
+    image: docker.io/library/node:22-slim
+    build:
+      type: dockerfile
+      dockerfile: Dockerfile
+    ports:
+      - port: 3000
+        protocol: http
+    env:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: DATABASE_URL
+        value: "{{ secrets.DATABASE_URL }}"
+      - key: JWT_SECRET
+        value: "{{ secrets.JWT_SECRET }}"
+      - key: BUILT_IN_FORGE_API_URL
+        value: "https://forge.manus.im"
+      - key: BUILT_IN_FORGE_API_KEY
+        value: "{{ secrets.MANUS_FORGE_API_KEY }}"
+      - key: OWNER_OPEN_ID
+        value: "{{ secrets.OWNER_OPEN_ID }}"
+    regions:
+      - fra # Frankfurt (puedes cambiarlo a was para Washington)
+    instance_type: nano
